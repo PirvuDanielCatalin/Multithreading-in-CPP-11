@@ -1,1 +1,1 @@
-# Multithreading-in-C-11
+# Multithreading in C++ 11
