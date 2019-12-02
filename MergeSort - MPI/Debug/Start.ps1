@@ -39,22 +39,28 @@ function Get-ProcessesInfo {
     }
 }
 
-if($Global:Words_Count -ne 0) {
+if ($Global:Words_Count -ne 0) {
     Get-ProcessesInfo -Words_Count $Global:Words_Count -Rank 0
 
-    Write-Host $Global:Max_Process_Rank
-    Write-Host ($Global:Leaves -Join ", ")
-
-    $Global:Tree_Height = [int]([Math]::Log($Global:Words_Count) / [Math]::Log(2))
-    Write-Host $Global:Tree_Height
+    $Global:Tree_Height = [int]([Math]::Log($Global:Max_Process_Rank) / [Math]::Log(2))
     
-    # TO DO
-    # FIND DORMANT PROCESSES FROM THE LAST LEVEL OF TREE
-    # =: PROCESSES THAT RESPECT THESE 2 CONDITIONS:
-    # - 2^TreeHeight - 1 <= RANK <= 2 * (2^TreeHeight - 1)
-    # - ARE NOT IN LEAVES ARRAY
+    $Start = [int]([Math]::Pow(2, $Global:Tree_Height) - 1)
+    $Final = 2 * $Start
+
+    for ($Rank = $Start; $Rank -le $Final; $Rank++) {
+        if (!$Global:Leaves.Contains($Rank)) {
+            $Global:Dormant += ($Rank)
+        }
+    }
+
+    Write-Host "-------------------------------------------------"
+    Write-Host "Max rank is"$Global:Max_Process_Rank
+    Write-Host "Tree height is"$Global:Tree_Height
+    Write-Host "Array of leaves is ["($Global:Leaves -Join ", ")"]"
+    Write-Host "Arry of dormant processes is ["($Global:Dormant -Join ", ")"] "
+    Write-Host "-------------------------------------------------"
 
     # Run MPI C++ Program
-    # mpiexec -l -n ($Global:Max_Process_Rank + 1) $PSScriptRoot\MergeSort-SendReceive.exe $Global:Max_Process_Rank $Global:Words_Count $($Global:Leaves -Join ", ")
+    mpiexec -l -n ($Global:Max_Process_Rank + 1) $PSScriptRoot\MergeSort-SendReceive.exe $Global:Max_Process_Rank $Global:Words_Count $($Global:Dormant -Join ", ")
     # Path of mpiexec.exe = "C:\Program Files\Microsoft MPI\Bin\mpiexec.exe"
 }

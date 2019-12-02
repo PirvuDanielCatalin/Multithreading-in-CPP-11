@@ -1,12 +1,12 @@
 #include <iostream>
 #include <stdio.h>
 #include <string>
+#include <ctime> 
 #include <algorithm>
-
-#include "mpi.h"
-
 #include <math.h>
 #include <vector>
+
+#include "mpi.h"
 
 using namespace std;
 
@@ -67,7 +67,7 @@ void merge_sort_rec(int rank, vector<int>& buffer, int& max_rank_arg)
 	tmp.resize(buffer.size());
 	copy(buffer.data(), buffer.data() + buffer.size(), tmp.data());
 
-	printf("Tmp Buffer: [ ");
+	printf("  Tmp Buffer: [ ");
 	for (int i = 0; i < tmp.size() - 1; i++)
 		printf("%d ; ", tmp[i]);
 	printf("%d ] ", tmp[tmp.size() - 1]);
@@ -77,66 +77,64 @@ void merge_sort_rec(int rank, vector<int>& buffer, int& max_rank_arg)
 	int left_child = 2 * rank + 1;
 	int right_child = 2 * rank + 2;
 
-	printf("\nHalf size: %d , Left child rank: %d, Right child rank: %d", half_size, left_child, right_child);
+	printf("\n  Half size: %d , Left child rank: %d, Right child rank: %d\n", half_size, left_child, right_child);
 
-	return;
 	if (left_child <= max_rank_arg)
 	{
-		printf("Send half data to left child %d to process\n", left_child);
+		printf("  Sending half data to left child ( From rank %d to rank %d )\n", rank, left_child);
 		int tag = get_tag(rank, left_child);
 		MPI_Send(tmp.data(), half_size, MPI_INT, left_child, tag, MPI_COMM_WORLD);
-		printf("Left child received the data\n");
+		printf("  Left child received the data\n");
 	}
 
 	if (right_child <= max_rank_arg)
 	{
-		printf("Send half data to right child %d to process\n", right_child);
+		printf("  Sending half data to right child ( From rank %d to rank %d )\n", rank, right_child);
 		int tag = get_tag(rank, right_child);
 		MPI_Send(tmp.data() + half_size, tmp.size() - half_size, MPI_INT, right_child, tag, MPI_COMM_WORLD);
-		printf("Right child received the data\n");
+		printf("  Right child received the data\n");
 	}
 
 	MPI_Status status;
 	if (left_child <= max_rank_arg)
 	{
-		printf("Waiting for left child %d to send processed data\n", left_child);
+		printf("  Waiting for left child to send back processed data ( From rank %d to rank %d )\n", left_child, rank);
 		int tag = get_tag(left_child, rank);
 		MPI_Recv(tmp.data(), half_size, MPI_INT, left_child, tag, MPI_COMM_WORLD, &status);
-		printf("Parent received data from left child\n");
+		printf("  Parent received data from left child\n");
 	}
 
 	if (right_child <= max_rank_arg)
 	{
-		printf("Waiting for right child %d to send processed data\n", right_child);
+		printf("  Waiting for right child to send back processed data ( From rank %d to rank %d )\n", right_child, rank);
 		int tag = get_tag(right_child, rank);
 		MPI_Recv(tmp.data() + half_size, tmp.size() - half_size, MPI_INT, right_child, tag, MPI_COMM_WORLD, &status);
-		printf("Parent received data from right child\n");
+		printf("  Parent received data from right child\n");
 	}
 
-	printf("Merge these two halfs processed by children and save it back in buffer\n");
+	printf("  Merging these two halfs processed by children and save it back in buffer\n");
 	vector<int> result(buffer.size());
 	merge(tmp.data(), tmp.data() + half_size, tmp.data() + half_size, tmp.data() + tmp.size(), result.data());
 	copy(result.data(), result.data() + result.size(), buffer.data());
-	printf("Finished merging\n");
+	printf("  Finished merging\n");
 }
 
-void merge_sort_rec_worker(int rank, int& max_rank_arg, vector<int>& leaves)
+void merge_sort_rec_worker(int rank, int& max_rank_arg, vector<int>& dormant)
 {
 	int parent = (rank - 1) / 2;
 	int received_size;
 
-	printf("\n----------------------------------\n");
-	printf("Parent of this process: %d", parent);
-	printf("\n----------------------------------\n");
+	printf("\n------------------------------------------------------------------------------------------------------------\n");
+	printf("  Parent of this process: %d", parent);
+	printf("\n------------------------------------------------------------------------------------------------------------\n");
 
-	if (find(leaves.begin(), leaves.end(), rank) != leaves.end())
+	if (find(dormant.begin(), dormant.end(), rank) != dormant.end())
 	{
-		printf("This process has nothing to do!");
+		printf("  This process has nothing to do!\n");
 		return;
 	}
 
-	return;
-	printf("Probe to catch a send from parent\n");
+	printf("  Probe to catch a send from parent\n");
 
 	MPI_Status stats;
 	int tag = get_tag(parent, rank);
@@ -149,34 +147,35 @@ void merge_sort_rec_worker(int rank, int& max_rank_arg, vector<int>& leaves)
 
 	MPI_Status status;
 
-	printf("Waiting for parent %d to send data\n", parent);
+	printf("  Waiting for parent to send data ( From rank %d to rank %d )\n", parent, rank);
 	MPI_Recv(tmp.data(), received_size, MPI_INT, parent, tag, MPI_COMM_WORLD, &status);
-	printf("Child %d received data from parent\n", rank);
+	printf("  Child received data from parent\n");
 
 	if (received_size == 1)
 	{
-		printf("Send processed data to parent %d\n", parent);
+		printf("  Sending processed data to parent ( From rank %d to rank %d )\n", rank, parent);
 		int tag = get_tag(rank, parent);
 		MPI_Send(tmp.data(), received_size, MPI_INT, parent, tag, MPI_COMM_WORLD);
-		printf("Waiting for parent %d to receive data\n", parent);
+		printf("  Parent received the data\n");
 	}
 	else if (received_size == 2)
 	{
 		if (tmp[0] > tmp[1])
 			swap(tmp[0], tmp[1]);
 
-		printf("Send processed data to parent %d\n", parent);
+		printf("  Sending processed data to parent ( From rank %d to rank %d )\n", rank, parent);
 		int tag = get_tag(rank, parent);
 		MPI_Send(tmp.data(), received_size, MPI_INT, parent, tag, MPI_COMM_WORLD);
-		printf("Waiting for parent %d to receive data\n", parent);
+		printf("  Parent received the data\n");
 	}
 	else
 	{
 		merge_sort_rec(rank, tmp, max_rank_arg);
-		printf("Send processed data to parent %d\n", parent);
+
+		printf("  Sending processed data to parent ( From rank %d to rank %d )\n", rank, parent);
 		int tag = get_tag(rank, parent);
 		MPI_Send(tmp.data(), tmp.size(), MPI_INT, parent, tag, MPI_COMM_WORLD);
-		printf("Waiting for parent %d to receive data\n", parent);
+		printf("  Parent received the data\n");
 	}
 }
 
@@ -191,54 +190,54 @@ int main(int argc, char* argv[])
 	rc = MPI_Init(&argc, &argv);
 	if (rc != MPI_SUCCESS)
 	{
-		printf("Error starting MPI program. Terminating.\n");
+		printf("  Error starting MPI program. Terminating.\n");
 		MPI_Abort(MPI_COMM_WORLD, rc);
 	}
 
 	MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-	printf("##################################\n");
-	printf("		I'm rank %d", rank);
+	printf("############################################################################################################\n\n");
+	printf("					I'm rank %d\n", rank);
 
 	int ign;
 	vector<int> buffer;
 	int nr_words_arg;
 
 	int max_rank_arg;
-	vector<int> leaves;
+	vector<int> dormant;
 
 	if (rank == 0)
 	{
 		ign = sscanf(argv[2], "%d", &nr_words_arg);
-
 		buffer.resize(nr_words_arg);
+		srand(time(0));
 		for (int i = 0; i < buffer.size(); i++)
 			buffer[i] = rand() % 123456;
 
-		printf("\n----------------------------------\n");
-		printf("Buffer: [ ");
+		printf("\n------------------------------------------------------------------------------------------------------------\n");
+		printf("  Buffer: [ ");
 		for (int i = 0; i < buffer.size() - 1; i++)
 			printf("%d ; ", buffer[i]);
 		printf("%d ] ", buffer[buffer.size() - 1]);
 
 		ign = sscanf(argv[1], "%d", &max_rank_arg);
-		convert_string_to_array(string(argv[3]), leaves);
+		convert_string_to_array(string(argv[3]), dormant);
 
-		printf("\n----------------------------------\n");
-		printf("Program arguments:\n");
-		printf(" - Number of words: %d\n", nr_words_arg);
-		printf(" - Number of processes: %d\n", numprocs);
-		printf(" - Leaves: [ ");
-		for (int i = 0; i < leaves.size() - 1; i++)
-			printf("%d ; ", leaves[i]);
-		printf("%d ] ", leaves[leaves.size() - 1]);
-		printf("\n----------------------------------\n");
+		printf("\n------------------------------------------------------------------------------------------------------------\n");
+		printf("  Program arguments:\n");
+		printf("   - Number of words: %d\n", nr_words_arg);
+		printf("   - Number of processes: %d\n", numprocs);
+		printf("   - Leaves: [ ");
+		for (int i = 0; i < dormant.size() - 1; i++)
+			printf("%d ; ", dormant[i]);
+		printf("%d ] ", dormant[dormant.size() - 1]);
+		printf("\n------------------------------------------------------------------------------------------------------------\n");
 	}
 	else
 	{
 		ign = sscanf(argv[1], "%d", &max_rank_arg);
-		convert_string_to_array(string(argv[3]), leaves);
+		convert_string_to_array(string(argv[3]), dormant);
 	}
 
 	MPI_Barrier(MPI_COMM_WORLD);
@@ -246,12 +245,22 @@ int main(int argc, char* argv[])
 	if (rank == 0)
 	{
 		merge_sort_rec(rank, buffer, max_rank_arg);
-		printf("\n##################################\n\n");
 	}
 	else
 	{
-		merge_sort_rec_worker(rank, max_rank_arg, leaves);
-		printf("\n##################################\n\n");
+		merge_sort_rec_worker(rank, max_rank_arg, dormant);
+		printf("############################################################################################################\n\n\n");
+	}
+
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	if (rank == 0)
+	{
+		printf("  ==>  Sorted array: [ ");
+		for (int i = 0; i < buffer.size() - 1; i++)
+			printf("%d ; ", buffer[i]);
+		printf("%d ]  <==  ", buffer[buffer.size() - 1]);
+		printf("\n############################################################################################################\n\n\n");
 	}
 
 	MPI_Finalize();
