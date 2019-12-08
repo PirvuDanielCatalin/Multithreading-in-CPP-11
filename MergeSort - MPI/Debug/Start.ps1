@@ -9,7 +9,7 @@ function Get-WordsCount() {
     $Global:Words_Count = ($Content | Measure-Object -Word).Words
 }
 
-Get-WordsCount
+Get-WordsCount -File_Name "input"
 
 $Global:Max_Process_Rank = 0
 $Global:Leaves = @()
@@ -25,7 +25,7 @@ function Get-ProcessesInfo {
         if ($Rank -gt $Global:Max_Process_Rank) {
             $Global:Max_Process_Rank = $Rank
         }
-        $Global:Leaves += ($Rank)
+        $Global:Leaves += ([int] $Rank)
     }
     else {
         [int] $Half1 = [System.Math]::Floor($Words_Count / 2)
@@ -42,25 +42,36 @@ function Get-ProcessesInfo {
 if ($Global:Words_Count -ne 0) {
     Get-ProcessesInfo -Words_Count $Global:Words_Count -Rank 0
 
-    $Global:Tree_Height = [int]([Math]::Log($Global:Max_Process_Rank) / [Math]::Log(2))
-    
-    $Start = [int]([Math]::Pow(2, $Global:Tree_Height) - 1)
-    $Final = 2 * $Start
+    $Global:Tree_Height = [Math]::Ceiling([Math]::Log($Global:Max_Process_Rank + 1) / [Math]::Log(2))
+    if ([int] $Global:Words_Count -le 2) {
+        $Global:Tree_Height = 1
+    }
 
-    for ($Rank = $Start; $Rank -le $Final; $Rank++) {
-        if (!$Global:Leaves.Contains($Rank)) {
-            $Global:Dormant += ($Rank)
+    $Last_Minus1_S = [Math]::Floor([Math]::Pow(2, $Global:Tree_Height - 1) - 1)
+    $Last_Minus1_F = 2 * $Last_Minus1_S
+
+    for ($Rank = $Last_Minus1_S; $Rank -le $Last_Minus1_F; $Rank++) {
+        if (!$Global:Leaves.Contains([int] $Rank) -and [int] $Rank -ne 0) {
+            $Global:Dormant += ([int] $Rank)
+        }
+    }
+
+    $Last_Minus0_S = [Math]::Floor([Math]::Pow(2, $Global:Tree_Height) - 1)
+    $Last_Minus0_F = 2 * $Last_Minus0_S
+
+    for ($Rank = $Last_Minus0_S; $Rank -le $Last_Minus0_F; $Rank++) {
+        if (!$Global:Leaves.Contains([int] $Rank)) {
+            $Global:Dormant += ([int] $Rank)
         }
     }
 
     Write-Host "-------------------------------------------------"
+    Write-Host "Number of words is"$Global:Words_Count
     Write-Host "Max rank is"$Global:Max_Process_Rank
     Write-Host "Tree height is"$Global:Tree_Height
     Write-Host "Array of leaves is ["($Global:Leaves -Join ", ")"]"
     Write-Host "Arry of dormant processes is ["($Global:Dormant -Join ", ")"] "
     Write-Host "-------------------------------------------------"
 
-    # Run MPI C++ Program
     mpiexec -l -n ($Global:Max_Process_Rank + 1) $PSScriptRoot\MergeSort-SendReceive.exe $Global:Max_Process_Rank $Global:Words_Count $($Global:Dormant -Join ", ")
-    # Path of mpiexec.exe = "C:\Program Files\Microsoft MPI\Bin\mpiexec.exe"
 }
